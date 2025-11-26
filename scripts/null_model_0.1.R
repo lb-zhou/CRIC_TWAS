@@ -1,0 +1,72 @@
+#*******************************************************************************
+#**********           Null GLMM model by GMMAT glmmkin function       **********
+#**********	                                                      **********
+#**********           Written by:                                     **********
+#**********           Bridget Lin      bmlin@live.unc.edu             **********
+#**********                                                           **********
+#**********           Version: 0.1                                    **********
+#**********           Oct 10, 2023                                    **********
+#*******************************************************************************
+
+
+#Load required libraries
+suppressPackageStartupMessages(require(optparse))
+library(GMMAT)
+
+
+#Set list of options for input files
+
+option_list = list(
+	make_option(c("-k", "--kinship"), action = "store", default = NA, type = "character",
+		help = paste0("kinship matrix")),
+	make_option(c("-p", "--pheno"), action = "store", default = NA, type = "character",
+		help = paste0("inverser normalized phenotypes")),
+	make_option(c("-c", "--colu"), action = "store", default = NA, type = "integer",
+		help = paste0("select column of phenotype file to use(integer)")),
+	make_option(c("-x", "--xcovar"), action = "store", default = NA, type = "character",
+		help = paste0("select columns of phenotype file to use for covariates(comma-separated integers)")),
+	make_option(c("-o", "--output"), action = "store", default = NA, type = "character",
+		help = paste0("path for output file"))
+)
+
+
+opt = parse_args(OptionParser(option_list = option_list))
+
+#get covariate columns
+xcols = as.numeric(unlist(strsplit(opt$x,",")))
+
+res.filename = paste0(opt$o,"_null.RData")
+
+#exclude samples with NAs in phenotype
+phe = read.table(opt$p, stringsAsFactors = F, header = T)
+pheno0 = cbind(phe[,opt$c],phe[,xcols])
+sample0 = phe[,1]
+sample = sample0[!is.na(pheno0[,1])]
+pheno = pheno0[match(sample,sample0),]
+names(pheno)[1] = "y"
+
+
+
+#match phenotype with kinship matrix for samples that are !is.na in the phenotype
+kin = as.matrix(read.table(opt$k,stringsAsFactors = F, header = T, row.names = 1,check.names = FALSE))
+od = match(sample, row.names(kin))
+K = kin[od, od]
+
+
+t_begin = proc.time()[3]
+
+#association
+
+#make phenotype file
+pheno1 = cbind(pheno[,1],sample,pheno[,-1])
+colnames(pheno1)[1] = "y"
+colnames(pheno1)[2] = "id"
+#run model
+model0 <- glmmkin(fixed = as.formula(paste("y ~ ", paste(colnames(pheno1)[3:ncol(pheno1)], collapse= "+"))),
+  data = pheno1, kins = K, id = "id", family = binomial(link = "logit"))
+
+t_end = proc.time()[3] - t_begin
+
+cat(paste0("****",t_end,"****\n"))
+
+save(model0,file=res.filename)

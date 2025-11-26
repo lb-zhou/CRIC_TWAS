@@ -1,0 +1,80 @@
+#*******************************************************************************
+#**********           TWAS Association by GMMAT glmm.score function   **********
+#**********	                                                         **********
+#**********           Written by:                                     **********
+#**********           Bridget Lin      bmlin@live.unc.edu             **********
+#**********                                                           **********
+#**********           Version: 0.2                                    **********
+#**********           Nov 6, 2023                                     **********
+#*******************************************************************************
+
+
+#Load required libraries
+suppressPackageStartupMessages(require(optparse))
+library(GMMAT)
+
+
+#Set list of options for input files
+
+option_list = list(
+	make_option(c("-e", "--expression"), action = "store", default = NA, type = "character",
+                help = paste0("predicted expression")),
+	make_option(c("-n", "--name"), action = "store", default = NA, type = "character",
+                help = paste0("chr and phenotype name")),
+	make_option(c("-c", "--chr"), action = "store", default = NA, type = "character",
+                help = paste0("chromosome")),
+	make_option(c("-t", "--trait"), action = "store", default = NA, type = "character",
+                help = paste0("trait aka phenotype name")),
+	make_option(c("-o", "--output"), action = "store", default = NA, type = "character",
+		help = paste0("path for output file"))
+)
+
+
+opt = parse_args(OptionParser(option_list = option_list))
+
+#get chr & genenames
+
+files = dir(paste0(opt$e,"/"))
+strs = matrix(unlist(strsplit(files, "[.]")), nrow = 3)
+genes = unique(strs[1,])
+ds = read.table(paste0(opt$e,"/",genes[1],".predicted.grex"), stringsAsFactors = F, row.names = 1)
+i=2
+for(g in genes[-1]){
+  print(i)
+  ds = cbind(ds,read.table(paste0(opt$e,"/",g,".predicted.grex"), stringsAsFactors = F, row.names = 1))
+  i = i+1
+}
+
+colnames(ds) = genes
+
+
+
+# load null model
+res.filename = paste0(opt$o,"_null.RData")
+load(res.filename)
+
+#match pred_exp with null model IDs
+ds.o = ds[match(model0$id_include,row.names(ds)),]
+paste0("Matched IDs ",sum(row.names(ds.o)==model0$id_include)," out of ",length(model0$id_include))
+
+M1 = as.matrix(ds.o)
+
+# turn grex into pseudo genotype dosage file
+genes0 <- t(M1)
+genes1 <- data.frame(gene=rownames(genes0),A1="A",A2="T")
+genes1 <- cbind(genes1,genes0)
+write.table(genes1,file=paste0("genes_",opt$t,"_chr",opt$c,".txt"),row.names=FALSE,col.names=FALSE,sep="\t",quote=FALSE)
+
+
+
+
+t_begin = proc.time()[3]
+
+#association
+
+
+#run model
+model1 <- glmm.score(model0,infile=paste0("genes_",opt$t,"_chr",opt$c,".txt"),is.dosage = TRUE,outfile=paste0(opt$o,"_chr",opt$c,".cpgen.res"),infile.ncol.skip = 3,MAF.range=c(-10,10), infile.ncol.print = 1:3, infile.header.print = c("SNP", "Allele1", "Allele2"))
+t_end = proc.time()[3] - t_begin
+
+cat(paste0("****",t_end,"****\n"))
